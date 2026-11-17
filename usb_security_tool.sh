@@ -14,8 +14,8 @@ require_linux() {
 }
 
 list_removable() {
-  printf '%-12s %-8s %-8s %s\n' "DEVICE" "READ-ONLY" "MOUNTED" "MODEL"
-  lsblk -dn -o NAME,RM,RO,MODEL | awk '$2 == 1 {model = $0; sub(/^[^ ]+ +[^ ]+ +[^ ]+ */, "", model); printf "/dev/%-7s %-8s %-8s %s\n", $1, ($3 == 1 ? "yes" : "no"), "-", model}'
+  printf '%-12s %-10s %s\n' "DEVICE" "READ-ONLY" "MODEL"
+  lsblk -dn -o NAME,RM,RO,MODEL | awk '$2 == 1 {model = $0; sub(/^[^ ]+ +[^ ]+ +[^ ]+ */, "", model); printf "/dev/%-7s %-10s %s\n", $1, ($3 == 1 ? "yes" : "no"), model}'
 }
 
 status() {
