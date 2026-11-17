@@ -130,6 +130,7 @@ exit /b
 
 :getAutoPlayProtection
 set "AUTOPLAY_PROTECTION=0"
+set "AUTOPLAY_VALUE="
 for /f "tokens=3" %%A in ('reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" /v NoDriveTypeAutoRun 2^>nul ^| find /i "NoDriveTypeAutoRun"') do set "AUTOPLAY_VALUE=%%A"
 if /i "%AUTOPLAY_VALUE%"=="0xff" set "AUTOPLAY_PROTECTION=1"
 exit /b
