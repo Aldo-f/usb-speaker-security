@@ -41,6 +41,7 @@ exit /b 0
 :uninstall
 del /q "%STARTUP_DIR%\usb_trigger.bat" 2>nul
 del /q "%SHORTCUT%" 2>nul
+del /q "%USERPROFILE%\Desktop\USB Trigger.lnk" 2>nul
 del /q "%TRIGGER_DEST%" 2>nul
 rmdir "%INSTALL_DIR%" 2>nul
 echo USB Security status launcher removed.
