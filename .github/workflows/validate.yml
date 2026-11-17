@@ -23,7 +23,8 @@ jobs:
           grep -Fq 'setlocal EnableExtensions' usb-beveiligen.bat
           grep -Fq 'net session' usb-beveiligen.bat
           grep -Fq 'Read-only changes are temporary' usb_security_tool.sh
-          ! grep -Eqi '^[[:space:]]*goto[[:space:]]+loop' usb_trigger.bat
+          test -f usb_trigger.bat
+          ! grep -Eqi '^[[:space:]]*goto[[:space:]]+:?loop' usb_trigger.bat
           ! grep -Eqi 'start[[:space:]]+notepad' usb_trigger.bat
 
       - name: Check documentation references
