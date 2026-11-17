@@ -1,17 +1,21 @@
-
 @echo off
+setlocal EnableExtensions DisableDelayedExpansion
 
-:loop
+:: This launcher runs once and exits. It does not create repeated processes.
+set "WRITE_PROTECT=Disabled"
+set "AUTOPLAY_PROTECTION=Standard"
 
-:: Open notepad with the current time
-start notepad "Current Time: %time%"
+for /f "tokens=3" %%A in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\StorageDevicePolicies" /v WriteProtect 2^>nul ^| find /i "WriteProtect"') do (
+  if /i "%%A"=="0x1" set "WRITE_PROTECT=Enabled"
+)
+for /f "tokens=3" %%A in ('reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" /v NoDriveTypeAutoRun 2^>nul ^| find /i "NoDriveTypeAutoRun"') do (
+  if /i "%%A"=="0xff" set "AUTOPLAY_PROTECTION=Blocked"
+)
 
-:: Play a ringing sound
-( echo Set Sound = CreateObject("SAPI.SpVoice") > sound.vbs )
-( echo Sound.Speak "Time is now %time%" >> sound.vbs )
-start sound.vbs
-
-:: Wait for 5 minutes (300 seconds)
-timeout /t 300 >nul
-
-goto loop
+echo USB Security status
+echo USB write protection: %WRITE_PROTECT%
+echo AutoPlay/AutoRun protection: %AUTOPLAY_PROTECTION%
+echo.
+echo Run usb-beveiligen.bat as Administrator to change these settings.
+endlocal
+exit /b
