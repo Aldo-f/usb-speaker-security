@@ -1,0 +1,33 @@
+name: Validate USB security scripts
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Bash syntax
+        run: bash -n usb_security_tool.sh
+
+      - name: Check defensive script invariants
+        shell: bash
+        run: |
+          grep -Fq 'setlocal EnableExtensions' usb-beveiligen.bat
+          grep -Fq 'net session' usb-beveiligen.bat
+          grep -Fq 'Read-only changes are temporary' usb_security_tool.sh
+          ! grep -Eqi '^[[:space:]]*goto[[:space:]]+loop' usb_trigger.bat
+          ! grep -Eqi 'start[[:space:]]+notepad' usb_trigger.bat
+
+      - name: Check documentation references
+        shell: bash
+        run: |
+          grep -Fq 'usb_security_tool.sh --status' README.md
+          grep -Fq 'install_usb_trigger.bat /uninstall' README.md
