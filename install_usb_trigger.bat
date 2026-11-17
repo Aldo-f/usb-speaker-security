@@ -28,7 +28,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-powershell -NoProfile -Command "$shell = New-Object -ComObject WScript.Shell; $shortcut = $shell.CreateShortcut('%SHORTCUT%'); $shortcut.TargetPath = '%TRIGGER_DEST%'; $shortcut.WorkingDirectory = '%INSTALL_DIR%'; $shortcut.IconLocation = '%SystemRoot%\System32\SHELL32.dll,13'; $shortcut.Save()"
+powershell -NoProfile -Command "$shell = New-Object -ComObject WScript.Shell; $shortcut = $shell.CreateShortcut($env:SHORTCUT); $shortcut.TargetPath = $env:TRIGGER_DEST; $shortcut.WorkingDirectory = $env:INSTALL_DIR; $shortcut.IconLocation = ($env:SystemRoot + '\System32\SHELL32.dll,13'); $shortcut.Save()"
 if errorlevel 1 (
   echo The launcher was installed, but the desktop shortcut could not be created.
   exit /b 1
