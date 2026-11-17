@@ -91,6 +91,12 @@ echo Windows Sandbox is not enabled or is unavailable on this Windows edition.
 call :askConfirmation "Enable Windows Sandbox now? A restart will be required. (Y/N): "
 if errorlevel 1 goto sandboxDone
 dism /online /Enable-Feature /FeatureName:Containers-DisposableClientVM /All /NoRestart
+if errorlevel 1 (
+  echo Windows Sandbox could not be enabled. Review the DISM output above.
+) else (
+  echo Windows Sandbox has been enabled. Restart Windows before launching it.
+)
+goto sandboxDone
 
 :launchSandbox
 echo Starting Windows Sandbox...
