@@ -1,92 +1,67 @@
-# USB Security Tool
+# USB Security CLI
 
-A small, defensive USB-security utility for Windows and Linux. It helps reduce
-the risk of writing to removable media unintentionally and of automatically
-handling media content.
+Cross-platform, host-side safety controls for explicitly selected removable
+media. It reduces accidental writes from the current computer; it does **not**
+provide hardware-enforced write blocking.
 
 ## Supported platforms
 
-- **Windows 10/11:** USB write protection and AutoPlay/AutoRun policy controls.
-  Administrator rights are required to make policy changes.
-- **Linux:** status inspection plus an explicit, temporary read-only/read-write
-  switch for a removable whole-disk device. The tool never selects a device for
-  you.
+| Platform | Controls | Scope |
+| --- | --- | --- |
+| Windows 10/11 | USB write protection plus AutoPlay/AutoRun blocking | Persistent host policy |
+| Linux | Per-device read-only/read-write control | Current boot session |
+| macOS | Per-disk read-only/read-write mounting | Current mount session |
 
-Windows Sandbox and Toolwiz Time Freeze are Windows-only optional features.
+The tool never auto-selects a device. It rejects internal disks and partitions,
+requires confirmation unless `--yes` is supplied, and verifies each requested
+state after changing it.
 
-## Windows
+## Install from source
 
-Download the repository, open PowerShell as Administrator, then run:
-
-```powershell
-.\usb-beveiligen.bat
-```
-
-The menu can:
-
-1. Toggle the Windows USB write-protection registry policy.
-2. Block AutoPlay and AutoRun for all drive types, or restore the standard
-   Windows AutoPlay policy.
-3. Enable both protections together.
-4. Start or enable Windows Sandbox when the edition supports it.
-5. Install Toolwiz Time Freeze through `winget`, after confirmation.
-
-After changing USB write protection, reconnect removable drives. These policies
-reduce risk but cannot guarantee that every device, driver, or application will
-honor the setting.
-
-### Optional status launcher
-
-```powershell
-.\install_usb_trigger.bat
-```
-
-This installs a one-time status launcher in the current user's Startup folder
-and creates a desktop shortcut. It reports the policy state and exits; it does
-not repeatedly open programs or create background loops.
-
-Remove it with:
-
-```powershell
-.\install_usb_trigger.bat /uninstall
-```
-
-## Linux
-
-Inspect removable devices:
+Python 3.11 or newer is required.
 
 ```bash
-chmod +x usb_security_tool.sh
-./usb_security_tool.sh --status
+python -m pip install .
+usb-security status
 ```
 
-Temporarily make one removable whole-disk device read-only:
+Use `usb-security --json status` when integrating with another tool.
+
+## Protect and restore a device
+
+First identify the exact removable whole-disk identifier:
 
 ```bash
-./usb_security_tool.sh --set-readonly /dev/sdX
+usb-security status
 ```
 
-Restore that device to read-write mode:
+Then protect or restore it:
 
 ```bash
-./usb_security_tool.sh --set-writable /dev/sdX
+usb-security protect --device <device-id>
+usb-security unprotect --device <device-id>
 ```
 
-Replace `/dev/sdX` with the exact device shown by `--status`. Do not use a
-partition such as `/dev/sdX1`. The Linux setting is temporary and may reset
-after reconnecting the device or rebooting.
+Use `--yes` only for non-interactive automation after the exact device
+identifier has been independently validated.
 
-Linux generally does not execute USB media automatically by default. For
-untrusted media, mount it with `noexec,nodev,nosuid` where appropriate.
+On Windows, commands that change policy must be run from an elevated terminal.
+On Linux and macOS, the platform may request administrator credentials only when
+a state change is made.
 
-## Verification
+## Legacy scripts
 
-- Run the Windows menu from an elevated Command Prompt or PowerShell and
-  confirm each policy state after making a change.
-- Run `usb_security_tool.sh --status` before any Linux device change, then
-  verify the device read-only flag after the command completes.
-- Use the included GitHub Actions workflow to check Bash syntax and guard
-  against regressions in the status launcher.
+`usb-beveiligen.bat` and `usb_security_tool.sh` are temporary compatibility
+wrappers. The startup trigger and its installer are retired; use
+`usb-security status` directly.
+
+## Testing and prereleases
+
+- Automated unit tests run on Windows, Linux, and macOS runners.
+- Build artifacts are unsigned prereleases until Windows signing and Apple
+  notarization credentials are available.
+- Follow [native acceptance testing](docs/acceptance-testing.md) with a
+  disposable physical USB drive before promoting a release.
 
 ## License
 
