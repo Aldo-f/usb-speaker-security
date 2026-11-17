@@ -6,7 +6,8 @@ title USB Security Tool
 net session >nul 2>&1
 if not "%errorlevel%"=="0" (
   echo Requesting administrator privileges...
-  powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -Verb RunAs"
+  set "SCRIPT_PATH=%~f0"
+  powershell -NoProfile -Command "Start-Process -FilePath $env:SCRIPT_PATH -Verb RunAs"
   exit /b
 )
 
@@ -36,15 +37,20 @@ goto main
 
 :toggleWriteProtection
 call :getWriteProtect
-if "%WRITE_PROTECT%"=="1" (
-  echo USB write protection is enabled.
-  set /p "confirm=Disable it? (Y/N): "
-  if /i "%confirm%"=="Y" call :setWriteProtect 0
-) else (
-  echo USB write protection is disabled.
-  set /p "confirm=Enable it? (Y/N): "
-  if /i "%confirm%"=="Y" call :setWriteProtect 1
-)
+if "%WRITE_PROTECT%"=="1" goto disableWriteProtection
+echo USB write protection is disabled.
+call :askConfirmation "Enable it? (Y/N): "
+if errorlevel 1 goto writeProtectionDone
+call :setWriteProtect 1
+goto writeProtectionDone
+
+:disableWriteProtection
+echo USB write protection is enabled.
+call :askConfirmation "Disable it? (Y/N): "
+if errorlevel 1 goto writeProtectionDone
+call :setWriteProtect 0
+
+:writeProtectionDone
 echo.
 echo Reconnect removable drives after changing this setting.
 pause
@@ -52,21 +58,26 @@ goto main
 
 :toggleAutoPlayProtection
 call :getAutoPlayProtection
-if "%AUTOPLAY_PROTECTION%"=="1" (
-  echo AutoPlay/AutoRun protection is enabled.
-  set /p "confirm=Restore standard Windows AutoPlay behavior? (Y/N): "
-  if /i "%confirm%"=="Y" call :setAutoPlayProtection 145
-) else (
-  echo AutoPlay/AutoRun protection is not fully enabled.
-  set /p "confirm=Block AutoPlay and AutoRun for all drive types? (Y/N): "
-  if /i "%confirm%"=="Y" call :setAutoPlayProtection 255
-)
+if "%AUTOPLAY_PROTECTION%"=="1" goto restoreAutoPlay
+echo AutoPlay/AutoRun protection is not fully enabled.
+call :askConfirmation "Block AutoPlay and AutoRun for all drive types? (Y/N): "
+if errorlevel 1 goto autoPlayDone
+call :setAutoPlayProtection 255
+goto autoPlayDone
+
+:restoreAutoPlay
+echo AutoPlay/AutoRun protection is enabled.
+call :askConfirmation "Restore standard Windows AutoPlay behavior? (Y/N): "
+if errorlevel 1 goto autoPlayDone
+call :setAutoPlayProtection 145
+
+:autoPlayDone
 pause
 goto main
 
 :quickProtect
-set /p "confirm=Enable USB write protection and block AutoPlay/AutoRun? (Y/N): "
-if /i not "%confirm%"=="Y" goto main
+call :askConfirmation "Enable USB write protection and block AutoPlay/AutoRun? (Y/N): "
+if errorlevel 1 goto main
 call :setWriteProtect 1
 call :setAutoPlayProtection 255
 echo Both protections have been requested. Reconnect removable drives to apply write protection.
@@ -74,17 +85,16 @@ pause
 goto main
 
 :startSandbox
-dism /online /Get-FeatureInfo /FeatureName:Containers-DisposableClientVM 2>nul | find /i "State : Enabled" >nul
-if not errorlevel 1 (
-  echo Starting Windows Sandbox...
-  start "" WindowsSandbox.exe
-  goto sandboxDone
-)
+powershell -NoProfile -Command "$feature = Get-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM -ErrorAction Stop; if ($feature.State -eq 'Enabled') { exit 0 } else { exit 1 }" >nul 2>&1
+if not errorlevel 1 goto launchSandbox
 echo Windows Sandbox is not enabled or is unavailable on this Windows edition.
-set /p "confirm=Enable Windows Sandbox now? A restart will be required. (Y/N): "
-if /i "%confirm%"=="Y" (
-  dism /online /Enable-Feature /FeatureName:Containers-DisposableClientVM /All /NoRestart
-)
+call :askConfirmation "Enable Windows Sandbox now? A restart will be required. (Y/N): "
+if errorlevel 1 goto sandboxDone
+dism /online /Enable-Feature /FeatureName:Containers-DisposableClientVM /All /NoRestart
+
+:launchSandbox
+echo Starting Windows Sandbox...
+start "" WindowsSandbox.exe
 :sandboxDone
 pause
 goto main
@@ -96,8 +106,8 @@ if errorlevel 1 (
   pause
   goto main
 )
-set /p "confirm=Install the third-party Toolwiz Time Freeze package with winget? (Y/N): "
-if /i not "%confirm%"=="Y" goto main
+call :askConfirmation "Install the third-party Toolwiz Time Freeze package with winget? (Y/N): "
+if errorlevel 1 goto main
 winget install --id Toolwiz.TimeFreeze --exact --accept-source-agreements --accept-package-agreements
 if errorlevel 1 (
   echo Installation did not complete. Review the winget output above.
@@ -106,6 +116,12 @@ if errorlevel 1 (
 )
 pause
 goto main
+
+:askConfirmation
+set "confirm="
+set /p "confirm=%~1"
+if /i "%confirm%"=="Y" exit /b 0
+exit /b 1
 
 :getWriteProtect
 set "WRITE_PROTECT=0"
@@ -141,9 +157,14 @@ if errorlevel 1 (
   echo Failed to change the AutoPlay/AutoRun policy.
   exit /b 1
 )
+set "EXPECTED_AUTOPLAY_VALUE=0x91"
+if "%1"=="255" set "EXPECTED_AUTOPLAY_VALUE=0xff"
 call :getAutoPlayProtection
-if "%1"=="255" if "%AUTOPLAY_PROTECTION%"=="1" echo AutoPlay/AutoRun protection enabled successfully.
-if "%1"=="145" echo Standard Windows AutoPlay policy applied successfully.
+if /i "%AUTOPLAY_VALUE%"=="%EXPECTED_AUTOPLAY_VALUE%" (
+  echo AutoPlay/AutoRun policy updated successfully.
+) else (
+  echo Windows did not report the requested AutoPlay/AutoRun policy value.
+)
 exit /b
 
 :end
