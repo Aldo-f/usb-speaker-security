@@ -195,6 +195,18 @@ class WindowsProvider(PlatformProvider):
             temporary.unlink(missing_ok=True)
             raise
 
+    @staticmethod
+    def _read_baseline(path: Path) -> dict[str, int]:
+        """Read and validate a saved baseline so an unreadable one cannot strand protection."""
+        try:
+            saved = json.loads(path.read_text(encoding="utf-8"))
+            return {
+                "write_protect": int(saved["write_protect"]),
+                "autorun": int(saved["autorun"]),
+            }
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            raise ProviderError("The saved Windows policy state could not be read.") from exc
+
     def list_devices(self) -> list[Device]:
         script = (
             "Get-CimInstance Win32_DiskDrive | "
@@ -225,11 +237,14 @@ class WindowsProvider(PlatformProvider):
         self.require_device(device_id)
         before = self._policy_state()
         path = self._state_path()
-        created_baseline = False
+        if path.exists():
+            # Refuse to change policy if the saved baseline cannot be restored later.
+            self._read_baseline(path)
+            created_baseline = False
+        else:
+            self._write_baseline(path, before)
+            created_baseline = True
         try:
-            if not path.exists():
-                self._write_baseline(path, before)
-                created_baseline = True
             winreg = self._winreg()
             self._write_dword(winreg.HKEY_LOCAL_MACHINE, self._write_key, "WriteProtect", 1)
             self._write_dword(winreg.HKEY_LOCAL_MACHINE, self._auto_key, "NoDriveTypeAutoRun", 255)
@@ -260,14 +275,7 @@ class WindowsProvider(PlatformProvider):
         path = self._state_path()
         if not path.exists():
             raise ProviderError("No saved Windows policy state was found; run protect before unprotect.")
-        try:
-            saved = json.loads(path.read_text(encoding="utf-8"))
-            before = {
-                "write_protect": int(saved["write_protect"]),
-                "autorun": int(saved["autorun"]),
-            }
-        except (OSError, ValueError, KeyError, TypeError) as exc:
-            raise ProviderError("The saved Windows policy state could not be read.") from exc
+        before = self._read_baseline(path)
         self._restore(before)
         if self._policy_state() != before:
             raise ProviderError("Windows did not restore the saved policy values.")
@@ -298,8 +306,7 @@ class MacProvider(PlatformProvider):
         devices: list[Device] = []
         for identifier in self._disk_ids():
             info = self._info(identifier)
-            removable = bool(info.get("RemovableMedia") or info.get("Ejectable") or not info.get("Internal", True))
-            if not removable:
+            if not (info.get("RemovableMedia") or info.get("Ejectable")):
                 continue
             devices.append(
                 Device(

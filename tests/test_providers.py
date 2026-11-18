@@ -86,7 +86,7 @@ def test_windows_baseline_is_persisted_before_policy_changes(windows_env, monkey
     with pytest.raises(OSError):
         provider.protect("usb-disk")
     assert values == {"write_protect": 0, "autorun": 145}
-    assert events == [("WriteProtect", 0), ("NoDriveTypeAutoRun", 145)]
+    assert events == []
     assert not state_path.exists()
 
 
@@ -123,12 +123,43 @@ def test_windows_unprotect_requires_saved_state(windows_env):
     assert events == []
 
 
-def test_windows_policy_state_uses_hklm(windows_env):
+def test_windows_protect_writes_both_policy_values(windows_env):
     provider, values, events, state_path = windows_env
     assert provider.policy_state() == {"write_protect": 0, "autorun": 145}
     provider.protect("usb-disk")
     assert all(name in {"WriteProtect", "NoDriveTypeAutoRun"} for name, _ in events)
     assert values == {"write_protect": 1, "autorun": 255}
+
+
+def test_windows_policy_state_reads_hklm(monkeypatch):
+    provider = WindowsProvider()
+    read_calls = []
+
+    class FakeWinreg:
+        HKEY_LOCAL_MACHINE = "HKLM"
+
+    def fake_read(hive, key, name, default):
+        read_calls.append((hive, key, name, default))
+        return default
+
+    monkeypatch.setattr(provider, "_winreg", lambda: FakeWinreg())
+    monkeypatch.setattr(provider, "_read_dword", fake_read)
+
+    assert provider.policy_state() == {"write_protect": 0, "autorun": 145}
+    assert len(read_calls) == 2
+    assert all(hive == "HKLM" for hive, _, _, _ in read_calls)
+    assert read_calls[0][1:3] == (WindowsProvider._write_key, "WriteProtect")
+    assert read_calls[1][1:3] == (WindowsProvider._auto_key, "NoDriveTypeAutoRun")
+
+
+def test_windows_protect_refuses_corrupt_baseline(windows_env):
+    provider, values, events, state_path = windows_env
+    state_path.write_text("not json", encoding="utf-8")
+    with pytest.raises(ProviderError, match="saved Windows policy state could not be read"):
+        provider.protect("usb-disk")
+    assert values == {"write_protect": 0, "autorun": 145}
+    assert events == []
+    assert state_path.read_text(encoding="utf-8") == "not json"
 
 
 def _linux_record(**overrides):
@@ -180,8 +211,54 @@ def test_linux_protect_verifies_write_state(monkeypatch):
     assert commands == [["sudo", "blockdev", "--setro", "/dev/sdb"]]
 
 
+def test_linux_protect_rejects_when_write_state_did_not_change(monkeypatch):
+    provider = LinuxProvider()
+    state = {"ro": 0}
+    monkeypatch.setattr(provider, "_records", lambda: [_linux_record(ro=state["ro"])])
+    monkeypatch.setattr(
+        "usb_security.providers.run_command",
+        lambda _args: SimpleNamespace(stdout="{}"),
+    )
+    with pytest.raises(ProviderError, match="did not report the requested read-only state"):
+        provider.protect("/dev/sdb")
+
+
 def test_linux_missing_device_is_reported(monkeypatch):
     provider = LinuxProvider()
     monkeypatch.setattr(provider, "_records", lambda: [])
     with pytest.raises(ProviderError):
         provider.protect("/dev/sdb")
+
+
+def test_macos_rejects_non_removable_external_disk(monkeypatch):
+    provider = MacProvider()
+    monkeypatch.setattr(provider, "_disk_ids", lambda: ["disk2"])
+    monkeypatch.setattr(
+        provider,
+        "_info",
+        lambda _identifier: {
+            "MediaName": "External SSD",
+            "Internal": False,
+            "RemovableMedia": False,
+            "Ejectable": False,
+        },
+    )
+    assert provider.list_devices() == []
+
+
+def test_macos_lists_ejectable_external_disk(monkeypatch):
+    provider = MacProvider()
+    monkeypatch.setattr(provider, "_disk_ids", lambda: ["disk2"])
+    monkeypatch.setattr(
+        provider,
+        "_info",
+        lambda _identifier: {
+            "MediaName": "USB Drive",
+            "Internal": False,
+            "RemovableMedia": True,
+            "Ejectable": True,
+        },
+    )
+    devices = provider.list_devices()
+    assert len(devices) == 1
+    assert devices[0].identifier == "/dev/disk2"

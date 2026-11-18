@@ -26,8 +26,12 @@ if exist "%LEGACY_SHORTCUT%" (
   del /f /q "%LEGACY_SHORTCUT%" >nul 2>&1
   if exist "%LEGACY_SHORTCUT%" set "failed=1"
 )
+if exist "%INSTALL_DIR%\usb_trigger.bat" (
+  del /f /q "%INSTALL_DIR%\usb_trigger.bat" >nul 2>&1
+  if exist "%INSTALL_DIR%\usb_trigger.bat" set "failed=1"
+)
 if exist "%INSTALL_DIR%" (
-  rd /s /q "%INSTALL_DIR%" >nul 2>&1
+  rmdir "%INSTALL_DIR%" >nul 2>&1
   if exist "%INSTALL_DIR%" set "failed=1"
 )
 if defined failed (
