@@ -1,0 +1,56 @@
+name: Validate and package USB Security CLI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-24.04, macos-latest]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install test dependencies
+        run: python -m pip install .[dev]
+      - name: Run unit tests
+        run: python -m pytest
+
+  package:
+    name: Package (${{ matrix.os }})
+    needs: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-24.04, macos-latest]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install packaging dependencies
+        run: python -m pip install .[dev]
+      - name: Build source and wheel distributions
+        run: python -m build
+      - name: Build unsigned executable
+        run: python -m PyInstaller --onefile --name usb-security --paths src usb_security_entry.py
+      - name: Upload unsigned prerelease artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: usb-security-${{ matrix.os }}
+          path: |
+            dist/usb-security*
+            dist/*.whl
+            dist/*.tar.gz

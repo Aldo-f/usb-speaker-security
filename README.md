@@ -1,33 +1,76 @@
-# USB Security Tool
+# USB Security CLI
 
-## Overview
-A single Batch script to toggle USB security settings on Windows, with future Linux support.
+Cross-platform, host-side safety controls for explicitly selected removable
+media. It reduces accidental writes from the current computer; it does **not**
+provide hardware-enforced write blocking.
 
-## Features
-- Toggle USB Write-Protection (Read-Only)
-- Toggle Autoplay / Autorun
-- Quick Protect: Enable both protections at once
-- Start Windows Sandbox
-- Install Toolwiz Time Freeze
+## Supported platforms
 
-## Installation
+| Platform | Controls | Scope |
+| --- | --- | --- |
+| Windows 10/11 | USB write protection plus AutoPlay/AutoRun blocking | Persistent host policy |
+| Linux | Per-device read-only/read-write control | Current boot session |
+| macOS | Per-disk read-only/read-write mounting | Current mount session |
+
+The tool never auto-selects a device and requires confirmation unless `--yes`
+is supplied. On Linux and macOS it enumerates removable whole disks and rejects
+internal disks and partitions. On Windows it lists USB-attached disks; confirm
+the physical device before changing host policy. Every requested state is
+verified after the change.
+
+## Install from source
+
+Python 3.11 or newer is required.
+
 ```bash
-curl -sSL https://raw.githubusercontent.com/Aldo-f/usb-speaker-security/main/usb-beveiligen.bat -o usb-beveiligen.bat && usb-beveiligen.bat
+python -m pip install .
+usb-security status
 ```
 
-## Usage
-1. Run the script as Administrator
-2. Select an option from the menu
-3. Follow the on-screen instructions
+Use `usb-security --json status` when integrating with another tool.
 
-## Requirements
-- Windows 10/11
-- Administrator privileges
-- Internet connection for Toolwiz Time Freeze installation
+## Protect and restore a device
 
-## Notes
-- This script is part of the [USB Speaker Security](https://github.com/Aldo-f/usb-speaker-security) project
-- For Linux support, use the equivalent `.sh` script
+First identify the exact removable whole-disk identifier:
+
+```bash
+usb-security status
+```
+
+Then protect or restore it:
+
+```bash
+usb-security protect --device <device-id>
+usb-security unprotect --device <device-id>
+```
+
+Use `--yes` only for non-interactive automation after the exact device
+identifier has been independently validated.
+
+On Windows, `--device` selects which disk is confirmed but the resulting policy
+is host-wide: `WriteProtect` and `NoDriveTypeAutoRun` are written under `HKLM`
+and affect every USB storage device attached to the machine. Commands that
+change policy must run from an elevated terminal. On Linux and macOS, the
+platform may request administrator credentials only when a state change is
+made.
+
+## Legacy scripts
+
+`usb-beveiligen.bat` and `usb_security_tool.sh` are temporary compatibility
+wrappers that forward to the CLI. The Windows Sandbox and Toolwiz Time Freeze
+menu actions are retired; use Windows settings or `winget` directly. The
+startup trigger and its installer are also retired: run
+`install_usb_trigger.bat /uninstall` once to remove files from an earlier
+installation, then use `usb-security status` when needed.
+
+## Testing and prereleases
+
+- Automated unit tests run on Windows, Linux, and macOS runners.
+- Build artifacts are unsigned prereleases until Windows signing and Apple
+  notarization credentials are available.
+- Follow [native acceptance testing](docs/acceptance-testing.md) with a
+  disposable physical USB drive before promoting a release.
 
 ## License
-MIT
+
+MIT; see [LICENSE](LICENSE).

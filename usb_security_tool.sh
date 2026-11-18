@@ -1,60 +1,51 @@
+#!/usr/bin/env bash
+# Compatibility wrapper for the legacy shell flags.
+set -eo pipefail
 
-#!/bin/bash
+echo "usb_security_tool.sh is a compatibility wrapper. Use usb-security instead." >&2
 
-# Cross-platform USB Security Tool
+json_flag=""
+yes_flag=""
+declare -a rest=()
+while (($#)); do
+  case "$1" in
+    --json) json_flag="--json"; shift ;;
+    --yes) yes_flag="--yes"; shift ;;
+    *) rest+=("$1"); shift ;;
+  esac
+done
 
-# Function to toggle USB write protection
-function toggle_usb_write_protection() {
-    echo "Toggling USB write protection..."
-    # Implementation for both Windows and Linux
-}
+if ((${#rest[@]} == 0)); then
+  mode="status"
+else
+  mode="${rest[0]}"
+  rest=("${rest[@]:1}")
+fi
 
-# Function to toggle autoplay/autorun
-function toggle_autoplay() {
-    echo "Toggling autoplay/autorun..."
-    # Implementation for both Windows and Linux
-}
+case "$mode" in
+  --status) mode="status" ;;
+  --set-readonly) mode="protect" ;;
+  --set-writable) mode="unprotect" ;;
+esac
 
-# Function to enable quick protect
-function enable_quick_protect() {
-    echo "Enabling quick protect..."
-    # Implementation for both Windows and Linux
-}
+declare -a args=()
+if [[ -n "$json_flag" ]]; then args+=("$json_flag"); fi
+args+=("$mode")
+if [[ "$mode" == "protect" || "$mode" == "unprotect" ]]; then
+  if ((${#rest[@]} == 0)); then
+    printf 'Error: %s requires a device identifier.\n' "$mode" >&2
+    exit 2
+  fi
+  args+=(--device "${rest[0]}")
+  rest=("${rest[@]:1}")
+  if [[ -n "$yes_flag" ]]; then args+=("$yes_flag"); fi
+fi
+args+=("${rest[@]}")
 
-# Function to start Windows Sandbox
-function start_windows_sandbox() {
-    echo "Starting Windows Sandbox..."
-    # Implementation for Windows only
-}
+if command -v usb-security >/dev/null 2>&1; then
+  exec usb-security "${args[@]}"
+fi
 
-# Function to install Toolwiz Time Freeze
-function install_toolwiz_time_freeze() {
-    echo "Installing Toolwiz Time Freeze..."
-    # Implementation for both Windows and Linux
-}
-
-# Main menu
-function main_menu() {
-    echo "Cross-platform USB Security Tool"
-    echo "1. Toggle USB write protection"
-    echo "2. Toggle autoplay/autorun"
-    echo "3. Enable quick protect"
-    echo "4. Start Windows Sandbox"
-    echo "5. Install Toolwiz Time Freeze"
-    echo "6. Exit"
-    
-    read -p "Enter your choice: " choice
-    
-    case $choice in
-        1) toggle_usb_write_protection ;; 
-        2) toggle_autoplay ;; 
-        3) enable_quick_protect ;; 
-        4) start_windows_sandbox ;; 
-        5) install_toolwiz_time_freeze ;; 
-        6) exit 0 ;; 
-        *) echo "Invalid choice" ;; 
-    esac
-}
-
-# Run the main menu
-main_menu
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+export PYTHONPATH="$script_dir/src${PYTHONPATH:+:$PYTHONPATH}"
+exec python3 -m usb_security.cli "${args[@]}"

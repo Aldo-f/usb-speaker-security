@@ -1,53 +1,52 @@
+# Test Plan
 
-# Plan for Testing New Features
+## Automated checks
 
-## Steps
+- GitHub Actions runs unit tests on Windows, Linux, and macOS runners.
+- The build job produces source and wheel distributions plus an unsigned
+  one-file executable on each platform.
 
-1. **Review Specifications and Plan**
-   - Review the specifications at `specs/001-autonomous-doc-freshness/spec.md`.
-   - Review the plan at `specs/001-autonomous-doc-freshness/plan.md`.
+## Windows manual checks
 
-2. **Identify New Features**
-   - Identify all new features added based on the specifications and plan.
+Run these from an elevated Command Prompt or PowerShell unless a step says
+otherwise. Use a disposable USB drive.
 
-3. **Test Each Feature**
-   - **Feature 1: Autonomous Doc Freshness**
-     - Ensure the autonomous doc freshness feature is working as expected.
-     - Verify that the documentation is being updated automatically.
-   - **Feature 2: TLS Certificate Fixing**
-     - Ensure the TLS certificates are always valid.
-     - Verify that the Common Name (CN) is correctly set to `aldof.duckdns.org`.
-     - Check that the Organisation (O) and Organisational Unit (OU) are correctly set.
+1. Run `usb-security status`; confirm the USB disk is listed and the HKLM
+   policy values are reported.
+2. Run `usb-security protect --device <id>`; confirm success,
+   `WriteProtect=1`, and `NoDriveTypeAutoRun=255` under HKLM. Reconnect the
+   drive and confirm writes are rejected.
+3. Run `usb-security unprotect --device <id>`; confirm success and that the
+   original HKLM values are restored. Reconnect the drive and confirm writes
+   succeed.
+4. Confirm declining the confirmation prompt makes no change, and that a
+   non-elevated session reports a clear permission error.
+5. Run `install_usb_trigger.bat /uninstall` twice: both runs must succeed, and
+   the Startup copy, both desktop shortcuts, and the ProgramData directory
+   must be gone.
 
-4. **Use SOFA for Troubleshooting**
-   - If any issues are encountered, use Stack Overflow for troubleshooting.
-   - Search for similar issues and solutions.
+## Linux manual checks
 
-5. **Verify All Features**
-   - Ensure all new features are working as expected.
-   - Verify that the documentation is up-to-date and the TLS certificates are valid.
+Use only a disposable removable drive.
 
-## Verification
+1. Run `usb-security status` and confirm removable whole disks are listed.
+2. Run `usb-security protect --device /dev/sdX` using the exact removable
+   whole-disk path; confirm `lsblk -dn -o RO /dev/sdX` returns `1`.
+3. Run `usb-security unprotect --device /dev/sdX` and confirm the value returns
+   to `0`.
+4. Verify that a partition path, a non-removable disk, and a nonexistent path
+   are rejected without a state change.
+5. Verify that replacing or disconnecting the device before verification
+   produces a clear error and leaves other disks untouched.
 
-- Ensure all new features are working as expected.
-- Verify that the documentation is up-to-date.
-- Verify that the TLS certificates are valid.
+## macOS manual checks
 
-## Code Changes
+Use only a disposable removable disk.
 
-- Code changes should be done with OpenCode.
+1. Run `usb-security status` and confirm the external whole disk is listed.
+2. Protect and unprotect it, confirming every mounted volume becomes read-only
+   and then writable again.
+3. Verify that internal disks and partitions are rejected.
 
-## Examples
-
-- Example of a valid TLS certificate:
-
-```
-Common Name (CN) aldof.duckdns.org
-Organisation (O) Home Lab
-Organisational Unit (OU) Secure Services
-```
-
-## Notes
-
-- Ensure that the FreeLLMAPI API key is updated in all necessary locations.
-- Verify that the list of projects is dynamic after running `/init`.
+See [native acceptance testing](docs/acceptance-testing.md) for the full
+release test record.
