@@ -49,12 +49,18 @@ class PlatformProvider(ABC):
                 return device
         raise ProviderError("Device was not found among confirmed removable whole disks.")
 
+    def policy_state(self) -> dict[str, Any] | None:
+        """Return current platform policy values, when the platform has any."""
+        return None
+
 
 class LinuxProvider(PlatformProvider):
     platform_name = "linux"
 
     def _records(self) -> list[dict[str, Any]]:
-        completed = run_command(["lsblk", "--json", "-o", "NAME,PATH,TYPE,RM,RO,MODEL,TRAN"])
+        completed = run_command(
+            ["lsblk", "--json", "-o", "NAME,PATH,TYPE,RM,RO,MODEL,TRAN,SERIAL,SIZE"]
+        )
         return json.loads(completed.stdout).get("blockdevices", [])
 
     def list_devices(self) -> list[Device]:
@@ -74,17 +80,46 @@ class LinuxProvider(PlatformProvider):
             )
         return devices
 
-    def _read_only(self, device_id: str) -> bool:
+    def _device_record(self, device_id: str) -> dict[str, Any]:
         for record in self._records():
             if record.get("path") == device_id:
-                return bool(record.get("ro"))
-        raise ProviderError("Device disappeared before verification.")
+                return record
+        raise ProviderError("Device disappeared before the operation could be completed.")
+
+    @staticmethod
+    def _identity(record: dict[str, Any]) -> tuple[object, ...]:
+        """Fields that identify the physical disk without including its write state."""
+        return (
+            str(record.get("path") or ""),
+            str(record.get("name") or ""),
+            str(record.get("model") or ""),
+            str(record.get("serial") or ""),
+            str(record.get("size") or ""),
+            str(record.get("tran") or ""),
+            bool(record.get("rm")),
+        )
+
+    def _confirmed_record(self, device_id: str) -> dict[str, Any]:
+        self.require_device(device_id)
+        identity = self._identity(self._device_record(device_id))
+        record = self._device_record(device_id)
+        if self._identity(record) != identity:
+            raise ProviderError("Removable device identity changed; refusing to change state.")
+        return record
+
+    def _verify(self, device_id: str, identity: tuple[object, ...], read_only: bool) -> None:
+        record = self._device_record(device_id)
+        if self._identity(record) != identity:
+            raise ProviderError("Removable device identity changed during the operation.")
+        if bool(record.get("ro")) != read_only:
+            state = "read-only" if read_only else "read-write"
+            raise ProviderError(f"Linux did not report the requested {state} state.")
 
     def protect(self, device_id: str) -> OperationResult:
-        self.require_device(device_id)
+        record = self._confirmed_record(device_id)
+        identity = self._identity(record)
         run_command(["sudo", "blockdev", "--setro", device_id])
-        if not self._read_only(device_id):
-            raise ProviderError("Linux did not report the requested read-only state.")
+        self._verify(device_id, identity, True)
         return OperationResult(
             action="protect",
             device=device_id,
@@ -95,10 +130,10 @@ class LinuxProvider(PlatformProvider):
         )
 
     def unprotect(self, device_id: str) -> OperationResult:
-        self.require_device(device_id)
+        record = self._confirmed_record(device_id)
+        identity = self._identity(record)
         run_command(["sudo", "blockdev", "--setrw", device_id])
-        if self._read_only(device_id):
-            raise ProviderError("Linux did not report the requested read-write state.")
+        self._verify(device_id, identity, False)
         return OperationResult(
             action="unprotect",
             device=device_id,
@@ -138,13 +173,27 @@ class WindowsProvider(PlatformProvider):
         winreg = self._winreg()
         return {
             "write_protect": self._read_dword(winreg.HKEY_LOCAL_MACHINE, self._write_key, "WriteProtect", 0),
-            "autorun": self._read_dword(winreg.HKEY_CURRENT_USER, self._auto_key, "NoDriveTypeAutoRun", 145),
+            "autorun": self._read_dword(winreg.HKEY_LOCAL_MACHINE, self._auto_key, "NoDriveTypeAutoRun", 145),
         }
+
+    def policy_state(self) -> dict[str, Any] | None:
+        return self._policy_state()
 
     def _state_path(self) -> Path:
         root = Path(os.environ.get("PROGRAMDATA", tempfile.gettempdir())) / "USB-Security-CLI"
         root.mkdir(parents=True, exist_ok=True)
         return root / "prior-policy.json"
+
+    @staticmethod
+    def _write_baseline(path: Path, before: dict[str, int]) -> None:
+        """Persist the baseline atomically so a failed write cannot leave partial state."""
+        temporary = path.with_name(f".{path.name}.tmp")
+        try:
+            temporary.write_text(json.dumps(before), encoding="utf-8")
+            os.replace(temporary, path)
+        except Exception:
+            temporary.unlink(missing_ok=True)
+            raise
 
     def list_devices(self) -> list[Device]:
         script = (
@@ -167,42 +216,62 @@ class WindowsProvider(PlatformProvider):
             for record in records
         ]
 
+    def _restore(self, before: dict[str, int]) -> None:
+        winreg = self._winreg()
+        self._write_dword(winreg.HKEY_LOCAL_MACHINE, self._write_key, "WriteProtect", before["write_protect"])
+        self._write_dword(winreg.HKEY_LOCAL_MACHINE, self._auto_key, "NoDriveTypeAutoRun", before["autorun"])
+
     def protect(self, device_id: str) -> OperationResult:
         self.require_device(device_id)
         before = self._policy_state()
+        path = self._state_path()
+        created_baseline = False
         try:
+            if not path.exists():
+                self._write_baseline(path, before)
+                created_baseline = True
             winreg = self._winreg()
             self._write_dword(winreg.HKEY_LOCAL_MACHINE, self._write_key, "WriteProtect", 1)
-            self._write_dword(winreg.HKEY_CURRENT_USER, self._auto_key, "NoDriveTypeAutoRun", 255)
-            after = self._policy_state()
-            if after != {"write_protect": 1, "autorun": 255}:
+            self._write_dword(winreg.HKEY_LOCAL_MACHINE, self._auto_key, "NoDriveTypeAutoRun", 255)
+            if self._policy_state() != {"write_protect": 1, "autorun": 255}:
                 raise ProviderError("Windows did not report the requested policy values.")
         except Exception:
-            winreg = self._winreg()
-            self._write_dword(winreg.HKEY_LOCAL_MACHINE, self._write_key, "WriteProtect", before["write_protect"])
-            self._write_dword(winreg.HKEY_CURRENT_USER, self._auto_key, "NoDriveTypeAutoRun", before["autorun"])
+            try:
+                self._restore(before)
+            except Exception:
+                pass
+            if created_baseline:
+                try:
+                    path.unlink(missing_ok=True)
+                except OSError:
+                    pass
             raise
-        self._state_path().write_text(json.dumps(before), encoding="utf-8")
         return OperationResult(
             action="protect",
             device=device_id,
             verified=True,
             scope="Persistent host-wide Windows policy",
             rollback=f"Run usb-security unprotect --device {device_id}",
-            details="USB write protection and AutoPlay/AutoRun blocking are enabled for this host.",
+            details="USB write protection and host-wide AutoPlay/AutoRun blocking are enabled for this host.",
         )
 
     def unprotect(self, device_id: str) -> OperationResult:
         self.require_device(device_id)
         path = self._state_path()
-        before = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {"write_protect": 0, "autorun": 145}
-        winreg = self._winreg()
-        self._write_dword(winreg.HKEY_LOCAL_MACHINE, self._write_key, "WriteProtect", int(before["write_protect"]))
-        self._write_dword(winreg.HKEY_CURRENT_USER, self._auto_key, "NoDriveTypeAutoRun", int(before["autorun"]))
+        if not path.exists():
+            raise ProviderError("No saved Windows policy state was found; run protect before unprotect.")
+        try:
+            saved = json.loads(path.read_text(encoding="utf-8"))
+            before = {
+                "write_protect": int(saved["write_protect"]),
+                "autorun": int(saved["autorun"]),
+            }
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            raise ProviderError("The saved Windows policy state could not be read.") from exc
+        self._restore(before)
         if self._policy_state() != before:
             raise ProviderError("Windows did not restore the saved policy values.")
-        if path.exists():
-            path.unlink()
+        path.unlink()
         return OperationResult(
             action="unprotect",
             device=device_id,

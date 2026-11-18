@@ -12,9 +12,11 @@ provide hardware-enforced write blocking.
 | Linux | Per-device read-only/read-write control | Current boot session |
 | macOS | Per-disk read-only/read-write mounting | Current mount session |
 
-The tool never auto-selects a device. It rejects internal disks and partitions,
-requires confirmation unless `--yes` is supplied, and verifies each requested
-state after changing it.
+The tool never auto-selects a device and requires confirmation unless `--yes`
+is supplied. On Linux and macOS it enumerates removable whole disks and rejects
+internal disks and partitions. On Windows it lists USB-attached disks; confirm
+the physical device before changing host policy. Every requested state is
+verified after the change.
 
 ## Install from source
 
@@ -45,15 +47,21 @@ usb-security unprotect --device <device-id>
 Use `--yes` only for non-interactive automation after the exact device
 identifier has been independently validated.
 
-On Windows, commands that change policy must be run from an elevated terminal.
-On Linux and macOS, the platform may request administrator credentials only when
-a state change is made.
+On Windows, `--device` selects which disk is confirmed but the resulting policy
+is host-wide: `WriteProtect` and `NoDriveTypeAutoRun` are written under `HKLM`
+and affect every USB storage device attached to the machine. Commands that
+change policy must run from an elevated terminal. On Linux and macOS, the
+platform may request administrator credentials only when a state change is
+made.
 
 ## Legacy scripts
 
 `usb-beveiligen.bat` and `usb_security_tool.sh` are temporary compatibility
-wrappers. The startup trigger and its installer are retired; use
-`usb-security status` directly.
+wrappers that forward to the CLI. The Windows Sandbox and Toolwiz Time Freeze
+menu actions are retired; use Windows settings or `winget` directly. The
+startup trigger and its installer are also retired: run
+`install_usb_trigger.bat /uninstall` once to remove files from an earlier
+installation, then use `usb-security status` when needed.
 
 ## Testing and prereleases
 
@@ -65,4 +73,4 @@ wrappers. The startup trigger and its installer are retired; use
 
 ## License
 
-MIT
+MIT; see [LICENSE](LICENSE).

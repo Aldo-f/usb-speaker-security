@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "usb-security"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Host-side removable-media safety controls"
 readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "MIT"}
+license = {file = "LICENSE"}
 authors = [{name = "Aldo-f"}]
 classifiers = [
   "Programming Language :: Python :: 3",
@@ -27,6 +27,9 @@ dev = ["pytest>=8", "build>=1", "pyinstaller>=6"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+[tool.setuptools.dynamic]
+version = {attr = "usb_security.__version__"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
