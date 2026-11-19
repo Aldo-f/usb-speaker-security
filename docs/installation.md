@@ -40,6 +40,10 @@ The installer:
 
 - Detects the OS (`uname -s`: Linux or macOS).
 - Verifies Python 3.11+ and `pip`.
+- On Debian/Ubuntu-based Linux (including Raspberry Pi OS) with an
+  externally managed system Python (PEP 668), retries the install with
+  `python -m pip install --user --break-system-packages`. The package still
+  installs into your user site directory; nothing system-wide changes.
 - Installs the package with `python -m pip install --user` from the GitHub
   source archive
   `https://github.com/Aldo-f/usb-speaker-security/archive/refs/heads/main.zip`.
@@ -106,6 +110,10 @@ Re-run the one-click command, or:
 python -m pip install --user --upgrade usb-security
 ```
 
+On Debian/Ubuntu-based systems (including Raspberry Pi OS) that manual
+command also needs `--break-system-packages`:
+`python -m pip install --user --break-system-packages --upgrade usb-security`.
+
 ## Uninstall / cleanup
 
 ```bash
@@ -114,7 +122,9 @@ python -m pip uninstall -y usb-security
 
 The one-click installers leave no other residue: they are plain scripts and
 consume the source archive with `pip`. On Windows, uninstall with the same
-`pip` command; the installer creates no HKLM or ProgramData files.
+`pip` command; the installer creates no HKLM or ProgramData files. On
+Debian/Ubuntu-based systems, uninstall with the same `pip uninstall -y
+usb-security` command; the package lives only in the user site directory.
 
 If you previously ran `install_usb_trigger.bat /uninstall` (the retired
 startup launcher), that is unrelated to this package.
@@ -126,6 +136,11 @@ startup launcher), that is unrelated to this package.
 - `pip is not available for ...` — install `pip` for the Python you have
   (`python -m ensurepip --user`, or via your system package manager, for
   example `apt install python3-pip` or `brew install python`).
+- `externally-managed-environment` (PEP 668) — Debian/Ubuntu-based
+  distributions (including Raspberry Pi OS) mark the system Python as
+  externally managed. The one-click installer detects this and retries
+  automatically. To install manually:
+  `python3 -m pip install --user --break-system-packages usb-security`.
 - On Linux, if `usb-security` is not on your `PATH`: check `ls ~/.local/bin`
   and run `echo $PATH`.
 - Offline environments: clone the repository and run `python -m pip install .`.

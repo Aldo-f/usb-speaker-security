@@ -51,9 +51,25 @@ if ! "$python_bin" -m pip --version >/dev/null 2>&1; then
     fail "pip is not available for $python_bin. Install it with: $python_bin -m ensurepip --user"
 fi
 
+# PEP 668: Debian and its derivatives (including Raspberry Pi OS) mark the
+# system Python with an EXTERNALLY-MANAGED file in the stdlib directory.
+# pip refuses to install anything there (even with --user), so the installer
+# retries with --break-system-packages when that marker is present. The
+# override only lifts the check; the install still goes to the user site.
+externally_managed() {
+    local marker
+    marker="$("$python_bin" -c 'import sysconfig, os; print(os.path.join(sysconfig.get_path("stdlib"), "EXTERNALLY-MANAGED"))' 2>/dev/null)" || return 1
+    [[ -n "$marker" && -f "$marker" ]]
+}
+
 echo "Installing usb-security (user-level install; requires network)..."
 if ! "$python_bin" -m pip install --user "$repo_zip"; then
-    "$python_bin" -m pip install "$repo_zip"
+    if externally_managed; then
+        echo "The Python environment is externally managed; retrying with --user --break-system-packages..." >&2
+        "$python_bin" -m pip install --user --break-system-packages "$repo_zip"
+    else
+        "$python_bin" -m pip install "$repo_zip"
+    fi
 fi
 
 echo
