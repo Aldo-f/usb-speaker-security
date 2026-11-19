@@ -5,7 +5,8 @@ host-side controls; it does not provide hardware-enforced write blocking.
 
 ## Common checks
 
-1. Install from source with `python -m pip install .`.
+1. Install the tool with `python -m pip install .` or the one-click installer
+   (see [installation.md](installation.md)).
 2. Run `usb-security --json status` and confirm the target drive is listed as
    a removable whole disk. On Windows, also confirm the reported policy values.
 3. Confirm that an internal disk, a partition, and a missing identifier are

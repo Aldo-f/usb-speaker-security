@@ -18,9 +18,28 @@ internal disks and partitions. On Windows it lists USB-attached disks; confirm
 the physical device before changing host policy. Every requested state is
 verified after the change.
 
-## Install from source
+## Installation (one-click)
 
-Python 3.11 or newer is required.
+Install the `usb-security` command on Linux, macOS, or Windows with one
+command per platform:
+
+Linux or macOS:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Aldo-f/usb-speaker-security/main/install.sh | bash
+```
+
+Windows PowerShell:
+
+```powershell
+iwr -useb https://raw.githubusercontent.com/Aldo-f/usb-speaker-security/main/install.ps1 | iex
+```
+
+After installing, run `usb-security status`. See
+[installation.md](docs/installation.md) for platform requirements,
+troubleshooting, and uninstall steps.
+
+To install from source instead (development):
 
 ```bash
 python -m pip install .

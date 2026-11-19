@@ -2,6 +2,7 @@
 
 ## Current implementation
 
+- One-click installers for Linux, Windows, and macOS (install.sh, install.ps1).
 - Windows: toggle USB write protection and AutoPlay/AutoRun protection, with
   elevated-rights checks and state verification.
 - Windows: optional Windows Sandbox and Toolwiz Time Freeze actions.
@@ -20,7 +21,9 @@
 ## Future work
 
 1. Add automated Windows integration tests on a self-hosted or disposable VM.
-2. Add a packaged installer with code signing for Windows distribution.
+2. Add a packaged installer with code signing for Windows distribution;
+   one-click installers for Linux, Windows, and macOS now exist
+   (install.sh, install.ps1).
 3. Add optional Linux mount profiles using `noexec,nodev,nosuid`, with explicit
    mount-point and device selection.
 4. Add localization and accessibility review for the interactive Windows menu.
