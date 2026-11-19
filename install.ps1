@@ -51,15 +51,41 @@ if ($null -eq $python) {
     if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
         Fail $noPythonMessage
     }
-    $response = Read-Host "No Python $minimumMajor.$minimumMinor or newer was found. Install Python with winget (package Python.Python.3)? [y/N]"
+    
+    # Find the latest Python 3.x interpreter package in the winget sources.
+    $wingetPythonId = $null
+    $highestMinor = -1
+    $searchResult = winget search --id python --source winget 2>$null
+    foreach ($line in ($searchResult -split "`r?`n")) {
+        $m = [regex]::Match($line, 'Python\.Python\.3\.(?<minor>\d+)')
+        if ($m.Success) {
+            $minor = [int]$m.Groups['minor'].Value
+            if ($minor -gt $highestMinor) {
+                $highestMinor = $minor
+                $wingetPythonId = "Python.Python.3.$minor"
+            }
+        }
+    }
+    # Fallback to generic package if no versioned packages found
+    if (-not $wingetPythonId) {
+        winget show --id Python.Python.3 --source winget >$null 2>&1
+        if ($LASTEXITCODE -eq 0) { $wingetPythonId = "Python.Python.3" }
+    }
+    
+    if (-not $wingetPythonId) {
+        Fail "winget could not find a Python 3.11+ package to install. $noPythonMessage"
+    }
+    
+    $response = Read-Host "No Python $minimumMajor.$minimumMinor or newer was found. Install Python with winget ($wingetPythonId)? [y/N]"
     if ($response -notmatch '^[Yy]') {
         Fail $noPythonMessage
     }
-    Write-Output "Installing Python with winget..."
-    winget install --id Python.Python.3 --accept-source-agreements --accept-package-agreements
+    Write-Output "Installing Python with winget ($wingetPythonId)..."
+    winget install --id $wingetPythonId --accept-source-agreements --accept-package-agreements
     if ($LASTEXITCODE -ne 0) {
-        Fail "winget failed to install Python (exit code $LASTEXITCODE). $noPythonMessage"
+        Fail "winget failed to install Python $wingetPythonId (exit code $LASTEXITCODE). $noPythonMessage"
     }
+    
     # Winget updates the user PATH; merge new user-PATH entries into this session.
     $userPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
     if ($userPath) {
