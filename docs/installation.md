@@ -66,6 +66,9 @@ The installer:
 
 - Requires Windows 10 or newer.
 - Verifies Python 3.11+ (`python` or `python3`) and `pip`.
+- If Python 3.11+ is not found, asks whether to install it with winget
+  (`Python.Python.3`); otherwise points to https://www.python.org/downloads/
+  and stops.
 - Installs with `python -m pip install --user` from the same GitHub source
   archive URL as above.
 - Prints the next command: `usb-security status`.

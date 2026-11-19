@@ -24,29 +24,67 @@ if ([System.Environment]::OSVersion.Version.Major -lt 10) {
     Fail 'usb-security supports Windows 10 or newer.'
 }
 
-$python = $null
-foreach ($candidate in @('python', 'python3')) {
-    $info = Get-Command $candidate -CommandType Application -ErrorAction SilentlyContinue
-    if ($null -eq $info) {
-        continue
-    }
-    $versionOutput = ''
-    try {
-        $versionOutput = (& $info.Source --version 2>&1 | Out-String)
-    } catch {
-        $versionOutput = ''
-    }
-    if ($versionOutput -match 'Python\s+(\d+)\.(\d+)') {
-        $major = [int]$Matches[1]
-        $minor = [int]$Matches[2]
-        if ($major -gt $minimumMajor -or ($major -eq $minimumMajor -and $minor -ge $minimumMinor)) {
-            $python = $info
-            break
+function Find-Python {
+    foreach ($candidate in @('python', 'python3')) {
+        foreach ($info in (Get-Command $candidate -CommandType Application -ErrorAction SilentlyContinue)) {
+            $versionOutput = ''
+            try {
+                $versionOutput = (& $info.Source --version 2>&1 | Out-String)
+            } catch {
+                $versionOutput = ''
+            }
+            if ($versionOutput -match 'Python\s+(\d+)\.(\d+)') {
+                $major = [int]$Matches[1]
+                $minor = [int]$Matches[2]
+                if ($major -gt $minimumMajor -or ($major -eq $minimumMajor -and $minor -ge $minimumMinor)) {
+                    return $info
+                }
+            }
         }
     }
+    return $null
 }
+
+$python = Find-Python
 if ($null -eq $python) {
-    Fail "usb-security requires Python $minimumMajor.$minimumMinor or newer with pip. Install Python from https://www.python.org/downloads/ and re-run this script."
+    $noPythonMessage = "usb-security requires Python $minimumMajor.$minimumMinor or newer with pip. Install Python from https://www.python.org/downloads/ and re-run this script."
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+        Fail $noPythonMessage
+    }
+    $response = Read-Host "No Python $minimumMajor.$minimumMinor or newer was found. Install Python with winget (package Python.Python.3)? [y/N]"
+    if ($response -notmatch '^[Yy]') {
+        Fail $noPythonMessage
+    }
+    Write-Output "Installing Python with winget..."
+    winget install --id Python.Python.3 --accept-source-agreements --accept-package-agreements
+    if ($LASTEXITCODE -ne 0) {
+        Fail "winget failed to install Python (exit code $LASTEXITCODE). $noPythonMessage"
+    }
+    # Winget updates the user PATH; merge new user-PATH entries into this session.
+    $userPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
+    if ($userPath) {
+        foreach ($dir in ($userPath -split ';')) {
+            if ($dir -and ($dir -notin ($env:PATH -split ';'))) {
+                $env:PATH = "$dir;$env:PATH"
+            }
+        }
+    }
+    # Also add winget-installed Python directories (user scope) when they contain python.exe.
+    foreach ($root in @((Join-Path $env:LOCALAPPDATA 'Programs\Python'), $env:ProgramFiles)) {
+        if (-not $root -or -not (Test-Path $root)) {
+            continue
+        }
+        foreach ($pythonDir in (Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue)) {
+            $pythonExe = Join-Path $pythonDir.FullName 'python.exe'
+            if ((Test-Path $pythonExe) -and ($pythonDir.FullName -notin ($env:PATH -split ';'))) {
+                $env:PATH = "$($pythonDir.FullName);$env:PATH"
+            }
+        }
+    }
+    $python = Find-Python
+    if ($null -eq $python) {
+        Fail "Python was installed with winget, but it was not found on this session's PATH. Close and reopen this shell, then re-run this script."
+    }
 }
 
 $pipOk = $false
