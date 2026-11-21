@@ -131,9 +131,31 @@ try {
     & $python.Source -m pip install $repoZip
 }
 
+# Add the user scripts directory to PATH (session + permanently) so the
+# `usb-security` command is immediately usable after the install.
+$userScriptsDir = (& $python.Source -m site --user-scripts 2>$null | Out-String).Trim()
+if ($userScriptsDir -and (Test-Path $userScriptsDir)) {
+    $pathEntries = @($env:PATH -split ';' | Where-Object { $_ })
+    if (-not ($pathEntries | Where-Object { $_.TrimEnd('\') -ieq $userScriptsDir.TrimEnd('\') })) {
+        $env:PATH = "$userScriptsDir;$env:PATH"
+    }
+    $userPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
+    $userEntries = @()
+    if ($userPath) { $userEntries = @($userPath -split ';' | Where-Object { $_ }) }
+    if (-not ($userEntries | Where-Object { $_.TrimEnd('\') -ieq $userScriptsDir.TrimEnd('\') })) {
+        $userEntries += $userScriptsDir
+        [Environment]::SetEnvironmentVariable('PATH', ($userEntries -join ';'), 'User')
+        Write-Output "Added $userScriptsDir to the user PATH permanently."
+    }
+}
+
 Write-Output 'usb-security installed.'
 Write-Output 'Run: usb-security status'
 if ($null -eq (Get-Command usb-security -ErrorAction SilentlyContinue)) {
     Write-Output "If 'usb-security' is not found, run: $($python.Source) -m usb_security.cli status"
-    Write-Output 'or add the user Scripts directory to your PATH and reopen the shell.'
+    Write-Output "To make 'usb-security' permanently available, add this directory to your PATH:"
+    Write-Output "  $userScriptsDir"
+    Write-Output 'In PowerShell, you can run:'
+    Write-Output "  `$env:PATH += ';$userScriptsDir'"
+    Write-Output 'Or add it via System Properties > Environment Variables.'
 }

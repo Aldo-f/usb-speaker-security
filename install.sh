@@ -74,8 +74,36 @@ fi
 
 echo
 echo "usb-security installed."
+
+# Determine the user scripts directory and add it to PATH (session + shell profile).
+user_scripts="$("$python_bin" -m site --user-scripts 2>/dev/null || true)"
+if [[ -z "$user_scripts" ]]; then
+    user_scripts="$HOME/.local/bin"
+fi
+export PATH="$user_scripts:$PATH"
+shell_rc=""
+case "${SHELL##*/}" in
+    zsh) rc_candidates=("$HOME/.zshrc" "$HOME/.zprofile" "$HOME/.profile") ;;
+    bash) rc_candidates=("$HOME/.bashrc" "$HOME/.profile") ;;
+    *) rc_candidates=("$HOME/.profile" "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.zprofile") ;;
+esac
+for rc in "${rc_candidates[@]}"; do
+    if [[ -f "$rc" ]]; then shell_rc="$rc"; break; fi
+done
+if [[ -z "$shell_rc" ]]; then
+    shell_rc="$HOME/.profile"
+    touch "$shell_rc"
+fi
+path_line="export PATH=\"$user_scripts:\$PATH\""
+if ! grep -Fqx "$path_line" "$shell_rc"; then
+    printf '\n# Added by usb-security installer\n%s\n' "$path_line" >> "$shell_rc"
+    echo "Added $user_scripts to $shell_rc"
+fi
+
 echo "Run: usb-security status"
 if ! command -v usb-security >/dev/null 2>&1; then
     echo "If 'usb-security' is not found on your PATH, run:"
     echo "  $python_bin -m usb_security.cli status"
+    echo "To make 'usb-security' permanently available, add this line to $shell_rc:"
+    echo "  $path_line"
 fi
