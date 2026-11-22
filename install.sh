@@ -74,8 +74,38 @@ fi
 
 echo
 echo "usb-security installed."
+
+# Determine the user scripts directory and add it to PATH (session + shell profile).
+if ! user_scripts="$("$python_bin" -c 'import sysconfig; print(sysconfig.get_path("scripts", sysconfig.get_preferred_scheme("user")))' 2>/dev/null)"; then
+    fail "Could not determine the Python user scripts directory. Run: $python_bin -m usb_security.cli status"
+fi
+if [[ -z "$user_scripts" || ! -d "$user_scripts" ]]; then
+    fail "Python reported a user scripts directory that does not exist: $user_scripts"
+fi
+export PATH="$user_scripts:$PATH"
+shell_rc=""
+case "${SHELL##*/}" in
+    zsh) rc_candidates=("$HOME/.zshrc" "$HOME/.zprofile" "$HOME/.profile") ;;
+    bash) rc_candidates=("$HOME/.bashrc" "$HOME/.profile") ;;
+    *) rc_candidates=("$HOME/.profile" "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.zprofile") ;;
+esac
+for rc in "${rc_candidates[@]}"; do
+    if [[ -f "$rc" ]]; then shell_rc="$rc"; break; fi
+done
+if [[ -z "$shell_rc" ]]; then
+    shell_rc="$HOME/.profile"
+    touch "$shell_rc"
+fi
+path_line="export PATH=\"$user_scripts:\$PATH\""
+if ! grep -Fqx "$path_line" "$shell_rc"; then
+    printf '\n# Added by usb-security installer\n%s\n' "$path_line" >> "$shell_rc"
+    echo "Added $user_scripts to $shell_rc"
+fi
+
 echo "Run: usb-security status"
 if ! command -v usb-security >/dev/null 2>&1; then
     echo "If 'usb-security' is not found on your PATH, run:"
     echo "  $python_bin -m usb_security.cli status"
+    echo "To make 'usb-security' permanently available, add this line to $shell_rc:"
+    echo "  $path_line"
 fi

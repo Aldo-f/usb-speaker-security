@@ -4,7 +4,7 @@
 .DESCRIPTION
     Installs the usb-security package for the current user with
     `python -m pip install --user`. Requires Python 3.11+ with pip. Nothing is
-    written outside the user's Python environment or the shell; no elevation
+    written outside the user's Python environment or user PATH; no elevation
     is needed.
 .EXAMPLE
     iwr -useb https://raw.githubusercontent.com/Aldo-f/usb-speaker-security/main/install.ps1 | iex
@@ -18,6 +18,41 @@ $minimumMinor = 11
 function Fail([string]$Message) {
     $host.ui.WriteErrorLine("Error: $Message")
     exit 1
+}
+
+function Set-UserPath([string]$PathValue) {
+    $environmentKey = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Environment')
+    if ($null -eq $environmentKey) {
+        Fail 'Could not open the current user environment settings to update PATH.'
+    }
+
+    try {
+        $valueKind = [Microsoft.Win32.RegistryValueKind]::String
+        if ($environmentKey.GetValueNames() -contains 'Path') {
+            $valueKind = $environmentKey.GetValueKind('Path')
+        }
+        $environmentKey.SetValue('Path', $PathValue, $valueKind)
+    } finally {
+        $environmentKey.Dispose()
+    }
+
+    if (-not ('UsbSecurityEnvironmentNotifier' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class UsbSecurityEnvironmentNotifier {
+    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    public static extern IntPtr SendMessageTimeout(
+        IntPtr hWnd, uint message, UIntPtr wParam, string lParam,
+        uint flags, uint timeout, out UIntPtr result);
+}
+'@
+    }
+    $broadcastResult = [UIntPtr]::Zero
+    [void][UsbSecurityEnvironmentNotifier]::SendMessageTimeout(
+        [IntPtr]::new(65535), 0x001A, [UIntPtr]::Zero,
+        'Environment', 0x0002, 1000, [ref]$broadcastResult
+    )
 }
 
 if ([System.Environment]::OSVersion.Version.Major -lt 10) {
@@ -131,9 +166,35 @@ try {
     & $python.Source -m pip install $repoZip
 }
 
+# Add the user scripts directory to PATH (session + permanently) so the
+# `usb-security` command is immediately usable after the install.
+$userScriptsDir = (& $python.Source -c "import sysconfig; print(sysconfig.get_path('scripts', sysconfig.get_preferred_scheme('user')))" 2>$null | Out-String).Trim()
+if ($LASTEXITCODE -ne 0 -or -not $userScriptsDir) {
+    Fail "Could not determine the Python user Scripts directory. Run: $($python.Source) -m usb_security.cli status"
+}
+if (-not (Test-Path $userScriptsDir)) {
+    Fail "Python reported a user Scripts directory that does not exist: $userScriptsDir"
+}
+$pathEntries = @($env:PATH -split ';' | Where-Object { $_ })
+if (-not ($pathEntries | Where-Object { $_.TrimEnd('\') -ieq $userScriptsDir.TrimEnd('\') })) {
+    $env:PATH = "$userScriptsDir;$env:PATH"
+}
+$userPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
+$userEntries = @()
+if ($userPath) { $userEntries = @($userPath -split ';' | Where-Object { $_ }) }
+if (-not ($userEntries | Where-Object { $_.TrimEnd('\') -ieq $userScriptsDir.TrimEnd('\') })) {
+    $userEntries += $userScriptsDir
+    Set-UserPath ($userEntries -join ';')
+    Write-Output "Added $userScriptsDir to the user PATH permanently."
+}
+
 Write-Output 'usb-security installed.'
 Write-Output 'Run: usb-security status'
 if ($null -eq (Get-Command usb-security -ErrorAction SilentlyContinue)) {
     Write-Output "If 'usb-security' is not found, run: $($python.Source) -m usb_security.cli status"
-    Write-Output 'or add the user Scripts directory to your PATH and reopen the shell.'
+    Write-Output "To make 'usb-security' permanently available, add this directory to your PATH:"
+    Write-Output "  $userScriptsDir"
+    Write-Output 'In PowerShell, you can run:'
+    Write-Output "  `$env:PATH += ';$userScriptsDir'"
+    Write-Output 'Or add it via System Properties > Environment Variables.'
 }

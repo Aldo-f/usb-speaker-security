@@ -9,7 +9,7 @@ installer, or install from source.
 | --- | --- |
 | Windows | Windows 10 or newer |
 | Linux | Any Linux distribution that provides `lsblk` (util-linux) |
-| macOS | Any macOS release supported by the tool (it uses `diskutil`/`plistlib` for device listing) |
+| macOS | A release that supports Python 3.11 or newer (the tool uses `diskutil`/`plistlib` for device listing) |
 
 All platforms require:
 
@@ -47,14 +47,16 @@ The installer:
 - Installs the package with `python -m pip install --user` from the GitHub
   source archive
   `https://github.com/Aldo-f/usb-speaker-security/archive/refs/heads/main.zip`.
+- Adds the user scripts directory to `PATH` for the installer process and to
+  the active shell's startup file (`~/.zshrc`, `~/.bashrc`, or `~/.profile`)
+  for future shells. If none exists, the installer creates `~/.profile`.
 - Prints the next command: `usb-security status`.
 
 The script is inspectable:
 https://raw.githubusercontent.com/Aldo-f/usb-speaker-security/main/install.sh
 
-If `usb-security` is not on your `PATH` after installing (for example
-`~/Library/Python/3.11/bin` on macOS), the installer prints the command that
-still works, such as `python -m usb_security.cli status`.
+The installer prints the command that still works, such as
+`python -m usb_security.cli status`, if `usb-security` is not found.
 
 ### Windows (PowerShell 5.1 or later)
 
@@ -73,14 +75,16 @@ The installer:
   new user PATH entries into the session so `python` is usable right away.
 - Installs with `python -m pip install --user` from the same GitHub source
   archive URL as above.
+- Adds the user scripts directory to the persistent user PATH so
+  `usb-security` works immediately and survives new shell sessions.
 - Prints the next command: `usb-security status`.
 
 If `usb-security` is not found on your `PATH` after installing, the installer
 prints the user Scripts directory and the fallback
 `python -m usb_security.cli status`.
 
-No UAC prompt appears and nothing is written outside your user Python
-environment: the installer does not elevate.
+No UAC prompt appears; the installer does not elevate. It modifies only your
+user environment (the user PATH), not the system PATH.
 
 Note: `iwr -useb ... | iex` executes the script from the pipe, so the default
 PowerShell execution policy is not changed. If you save the script as a file
@@ -96,8 +100,9 @@ and run it that way, you may need
     `~/Library/Python/3.X/bin/`.
   - Windows: `%APPDATA%\Python\PythonXX\site-packages\` plus the
     `usb-security.exe` script in the user Scripts directory.
-- Nothing else is installed or modified: no scheduled tasks, startup entries,
-  or system services.
+- The installer adds the user scripts directory to the user PATH on Windows,
+  or to the active shell's startup file on Linux/macOS. It does not create
+  scheduled tasks, application startup entries, or system services.
 - Protecting or unprotecting a device later
   (`usb-security protect --device <id>` / `usb-security unprotect --device <id>`)
   writes host policy per the platform rules in the README: host-wide HKLM
@@ -125,11 +130,16 @@ command also needs `--break-system-packages`:
 python -m pip uninstall -y usb-security
 ```
 
-The one-click installers leave no other residue: they are plain scripts and
-consume the source archive with `pip`. On Windows, uninstall with the same
-`pip` command; the installer creates no HKLM or ProgramData files. On
-Debian/Ubuntu-based systems, uninstall with the same `pip uninstall -y
-usb-security` command; the package lives only in the user site directory.
+The one-click installers consume the source archive with `pip`. On Windows,
+uninstall with the same `pip` command; the installer creates no HKLM or
+ProgramData files. On Debian/Ubuntu-based systems, uninstall with the same
+`pip uninstall -y usb-security` command; the package lives only in the user
+site directory.
+
+To undo the PATH change as well, remove the `# Added by usb-security installer`
+and following `export PATH=...` line from the shell startup file on Linux or
+macOS. On Windows, remove the Python user Scripts directory from your user
+PATH in **Environment Variables**.
 
 If you previously ran `install_usb_trigger.bat /uninstall` (the retired
 startup launcher), that is unrelated to this package.
@@ -153,8 +163,8 @@ startup launcher), that is unrelated to this package.
 ## Security notes
 
 - All URLs use HTTPS; the installers download from GitHub only.
-- The installers require no elevation and change nothing outside the user's
-  Python environment.
+- The installers require no elevation and change only the user's Python
+  environment and user PATH/shell startup file.
 - Review the scripts before running:
   - https://raw.githubusercontent.com/Aldo-f/usb-speaker-security/main/install.sh
   - https://raw.githubusercontent.com/Aldo-f/usb-speaker-security/main/install.ps1
