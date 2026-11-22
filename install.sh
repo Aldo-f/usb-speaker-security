@@ -76,9 +76,11 @@ echo
 echo "usb-security installed."
 
 # Determine the user scripts directory and add it to PATH (session + shell profile).
-user_scripts="$("$python_bin" -m site --user-scripts 2>/dev/null || true)"
-if [[ -z "$user_scripts" ]]; then
-    user_scripts="$HOME/.local/bin"
+if ! user_scripts="$("$python_bin" -c 'import sysconfig; print(sysconfig.get_path("scripts", sysconfig.get_preferred_scheme("user")))' 2>/dev/null)"; then
+    fail "Could not determine the Python user scripts directory. Run: $python_bin -m usb_security.cli status"
+fi
+if [[ -z "$user_scripts" || ! -d "$user_scripts" ]]; then
+    fail "Python reported a user scripts directory that does not exist: $user_scripts"
 fi
 export PATH="$user_scripts:$PATH"
 shell_rc=""

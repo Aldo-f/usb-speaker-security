@@ -139,14 +139,7 @@ site directory.
 To undo the PATH change as well, remove the `# Added by usb-security installer`
 and following `export PATH=...` line from the shell startup file on Linux or
 macOS. On Windows, remove the Python user Scripts directory from your user
-PATH in **Environment Variables**, or run this in PowerShell:
-
-```powershell
-$scripts = (& python -m site --user-scripts).Trim()
-$entries = [Environment]::GetEnvironmentVariable('Path', 'User') -split ';' |
-  Where-Object { $_ -and $_.TrimEnd('\') -ine $scripts.TrimEnd('\') }
-[Environment]::SetEnvironmentVariable('Path', ($entries -join ';'), 'User')
-```
+PATH in **Environment Variables**.
 
 If you previously ran `install_usb_trigger.bat /uninstall` (the retired
 startup launcher), that is unrelated to this package.
